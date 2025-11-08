@@ -36,6 +36,9 @@
                     <button onclick="showTab('generate')" class="tab-btn py-4 px-1 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700">
                         Generate Ad
                     </button>
+                    <button onclick="showTab('multi-agent')" class="tab-btn py-4 px-1 border-b-2 border-transparent font-medium text-gray-500 hover:text-gray-700">
+                        🤖 Multi-Agent Workflow
+                    </button>
                 </nav>
             </div>
 
@@ -174,6 +177,86 @@
                     <div id="generate-results" class="mt-6"></div>
                 </div>
             </div>
+
+            <!-- Multi-Agent Workflow Tab -->
+            <div id="multi-agent-tab" class="tab-content hidden">
+                <div class="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-2">🤖 Multi-Agent Workflow</h2>
+                    <p class="text-gray-700">Automatically generate, critique, and refine ads using our AI agent pipeline:</p>
+                    <div class="mt-4 grid grid-cols-4 gap-2 text-sm">
+                        <div class="bg-white p-3 rounded shadow-sm">
+                            <div class="font-bold text-indigo-600">1. Generator</div>
+                            <div class="text-gray-600 text-xs">Creates initial ad</div>
+                        </div>
+                        <div class="bg-white p-3 rounded shadow-sm">
+                            <div class="font-bold text-purple-600">2. Descriptor</div>
+                            <div class="text-gray-600 text-xs">Analyzes components</div>
+                        </div>
+                        <div class="bg-white p-3 rounded shadow-sm">
+                            <div class="font-bold text-pink-600">3. Critic</div>
+                            <div class="text-gray-600 text-xs">Scores quality</div>
+                        </div>
+                        <div class="bg-white p-3 rounded shadow-sm">
+                            <div class="font-bold text-green-600">4. Refinement</div>
+                            <div class="text-gray-600 text-xs">Improves & iterates</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-8">
+                    <!-- Configuration -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-xl font-bold mb-4">Workflow Configuration</h3>
+                        
+                        <form id="multi-agent-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Ad Prompt</label>
+                                <textarea id="ma-prompt" required rows="3" placeholder="e.g., Create a dynamic ad for a new running shoe featuring bold colors and energy..."
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Brand Kit (Optional)</label>
+                                <select id="ma-brand-select" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">None - Generic</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Max Iterations: <span id="max-iter-value">3</span></label>
+                                <input type="range" id="max-iterations" min="1" max="10" value="3" 
+                                    class="w-full" onchange="document.getElementById('max-iter-value').textContent = this.value">
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Target Score: <span id="threshold-value">0.75</span></label>
+                                <input type="range" id="score-threshold" min="0.5" max="1.0" step="0.05" value="0.75" 
+                                    class="w-full" onchange="document.getElementById('threshold-value').textContent = this.value">
+                            </div>
+                            
+                            <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 px-4 rounded-md hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium">
+                                🚀 Start Multi-Agent Workflow
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Results -->
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-xl font-bold mb-4">Workflow Progress</h3>
+                        <div id="multi-agent-results" class="text-gray-500">
+                            Configure and start the workflow to see results...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Iteration History -->
+                <div id="iteration-history" class="mt-8 hidden">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-xl font-bold mb-4">Iteration History</h3>
+                        <div id="iterations-container"></div>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -200,7 +283,11 @@
                 const brands = await response.json();
                 
                 // Update dropdowns
-                const selects = [document.getElementById('brand-select'), document.getElementById('gen-brand-select')];
+                const selects = [
+                    document.getElementById('brand-select'), 
+                    document.getElementById('gen-brand-select'),
+                    document.getElementById('ma-brand-select')
+                ];
                 selects.forEach(select => {
                     select.innerHTML = '<option value="">Select a brand...</option>';
                     brands.forEach(brand => {
@@ -359,6 +446,158 @@
             `;
             
             document.getElementById('critique-results').innerHTML = html;
+        }
+
+        // Multi-Agent Workflow
+        document.getElementById('multi-agent-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const payload = {
+                prompt: document.getElementById('ma-prompt').value,
+                brand_kit_id: document.getElementById('ma-brand-select').value || null,
+                max_iterations: parseInt(document.getElementById('max-iterations').value),
+                score_threshold: parseFloat(document.getElementById('score-threshold').value),
+                aspect_ratio: "1:1",
+                include_logo: true
+            };
+            
+            const results = document.getElementById('multi-agent-results');
+            results.innerHTML = '<div class="text-center py-8"><div class="animate-spin text-4xl">🤖</div><p class="mt-2">Running multi-agent workflow...</p></div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/multi-agent/generate-and-refine`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                    const workflow = await response.json();
+                    displayMultiAgentResults(workflow);
+                } else {
+                    const error = await response.json();
+                    results.innerHTML = `<div class="text-red-600">Error: ${error.detail || 'Workflow failed'}</div>`;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                results.innerHTML = `<div class="text-red-600">Error: ${error.message}</div>`;
+            }
+        });
+
+        function displayMultiAgentResults(workflow) {
+            const results = document.getElementById('multi-agent-results');
+            const bestAd = workflow.best_ad;
+            
+            let statusBadge = '';
+            if (workflow.threshold_met) {
+                statusBadge = '<span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">✅ Success</span>';
+            } else if (bestAd) {
+                statusBadge = '<span class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium">⚠️ Below Threshold</span>';
+            } else {
+                statusBadge = '<span class="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium">❌ Failed</span>';
+            }
+            
+            results.innerHTML = `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <h4 class="font-bold text-lg">Workflow Complete</h4>
+                        ${statusBadge}
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="text-gray-600">Iterations</div>
+                            <div class="text-2xl font-bold">${workflow.iterations_count}</div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded">
+                            <div class="text-gray-600">Best Score</div>
+                            <div class="text-2xl font-bold ${getScoreClass(bestAd?.score >= 0.9 ? 'EXCELLENT' : bestAd?.score >= 0.75 ? 'GOOD' : bestAd?.score >= 0.5 ? 'FAIR' : 'POOR')}">${(workflow.final_score * 100).toFixed(0)}%</div>
+                        </div>
+                    </div>
+                    
+                    ${bestAd ? `
+                        <div class="border-t pt-4">
+                            <h5 class="font-semibold mb-2">Best Ad: Iteration ${bestAd.iteration}</h5>
+                            <div class="bg-gray-100 p-3 rounded text-sm">
+                                <p class="text-gray-700"><strong>Prompt:</strong> ${bestAd.prompt.substring(0, 100)}${bestAd.prompt.length > 100 ? '...' : ''}</p>
+                                <p class="text-gray-700 mt-2"><strong>Path:</strong> ${bestAd.image_path}</p>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <button onclick="showIterationDetails()" class="text-indigo-600 hover:text-indigo-800 font-medium text-sm">
+                        📊 View Detailed Iteration History →
+                    </button>
+                </div>
+            `;
+            
+            // Store workflow data globally for iteration view
+            window.currentWorkflow = workflow;
+            document.getElementById('iteration-history').classList.remove('hidden');
+            displayIterations(workflow.iterations);
+        }
+
+        function displayIterations(iterations) {
+            const container = document.getElementById('iterations-container');
+            
+            let html = '<div class="space-y-4">';
+            iterations.forEach((iter, index) => {
+                const score = (iter.overall_score * 100).toFixed(0);
+                const scoreClass = getScoreClass(iter.overall_score >= 0.9 ? 'EXCELLENT' : iter.overall_score >= 0.75 ? 'GOOD' : iter.overall_score >= 0.5 ? 'FAIR' : 'POOR');
+                
+                html += `
+                    <div class="border rounded-lg p-4 ${iter.status === 'success' ? 'border-green-300 bg-green-50' : 'border-gray-200'}">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="font-bold">Iteration ${iter.iteration}</h4>
+                            <div class="flex items-center gap-2">
+                                <span class="${scoreClass} font-semibold">${score}%</span>
+                                ${iter.status === 'success' ? '<span class="text-green-600">✓</span>' : ''}
+                            </div>
+                        </div>
+                        
+                        <div class="text-sm space-y-2">
+                            <p class="text-gray-700"><strong>Prompt:</strong> ${iter.prompt.substring(0, 150)}${iter.prompt.length > 150 ? '...' : ''}</p>
+                            
+                            ${iter.critique ? `
+                                <div class="grid grid-cols-4 gap-2 mt-2">
+                                    <div class="bg-white p-2 rounded text-center">
+                                        <div class="text-xs text-gray-600">Brand</div>
+                                        <div class="font-semibold">${(iter.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</div>
+                                    </div>
+                                    <div class="bg-white p-2 rounded text-center">
+                                        <div class="text-xs text-gray-600">Quality</div>
+                                        <div class="font-semibold">${(iter.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</div>
+                                    </div>
+                                    <div class="bg-white p-2 rounded text-center">
+                                        <div class="text-xs text-gray-600">Clarity</div>
+                                        <div class="font-semibold">${(iter.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</div>
+                                    </div>
+                                    <div class="bg-white p-2 rounded text-center">
+                                        <div class="text-xs text-gray-600">Safety</div>
+                                        <div class="font-semibold">${(iter.critique.scores?.safety * 100 || 0).toFixed(0)}%</div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            ${iter.refinement && iter.refinement.changes_made ? `
+                                <div class="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                                    <div class="text-xs font-semibold text-blue-800">Refinement Changes:</div>
+                                    <ul class="text-xs text-blue-700 list-disc list-inside mt-1">
+                                        ${iter.refinement.changes_made.slice(0, 3).map(c => `<li>${c}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            
+            container.innerHTML = html;
+        }
+
+        function showIterationDetails() {
+            document.getElementById('iteration-history').scrollIntoView({ behavior: 'smooth' });
         }
 
         // Load brand kits on page load

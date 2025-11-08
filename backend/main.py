@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
-from app.api import critique, generate, brand_kit
+from app.api import critique, generate, brand_kit, multi_agent
 
 # Create necessary directories
 os.makedirs(settings.upload_dir, exist_ok=True)
@@ -36,6 +36,7 @@ app.add_middleware(
 app.include_router(critique.router, prefix="/api", tags=["Critique"])
 app.include_router(generate.router, prefix="/api", tags=["Generate"])
 app.include_router(brand_kit.router, prefix="/api", tags=["Brand Kit"])
+app.include_router(multi_agent.router, prefix="/api/multi-agent", tags=["Multi-Agent Workflow"])
 
 
 @app.get("/")
@@ -44,14 +45,22 @@ async def root():
     return {
         "name": "BrandAI API",
         "version": "1.0.0",
-        "description": "AI-powered ad critique and improvement system",
+        "description": "AI-powered ad critique and improvement system with multi-agent workflow",
         "endpoints": {
             "critique": "/api/critique-ad",
             "generate": "/api/generate-ad",
             "improve": "/api/improve-ad",
+            "multi_agent": "/api/multi-agent/generate-and-refine",
+            "workflow_info": "/api/multi-agent/workflow-status",
             "brand_kit": "/api/brand-kit",
             "docs": "/docs"
-        }
+        },
+        "features": [
+            "AI-powered ad critique",
+            "Multi-agent refinement workflow",
+            "Brand alignment scoring",
+            "Automatic iterative improvement"
+        ]
     }
 
 
@@ -66,11 +75,13 @@ if __name__ == "__main__":
     ╔══════════════════════════════════════════════════════════╗
     ║                       BrandAI                            ║
     ║          AI-Powered Ad Critique System                   ║
+    ║            with Multi-Agent Workflow                     ║
     ╚══════════════════════════════════════════════════════════╝
     
     🚀 Server starting on http://{settings.app_host}:{settings.app_port}
     📚 API Documentation: http://{settings.app_host}:{settings.app_port}/docs
-    🎯 Focus: AI Critique Engine (Hero Feature)
+    🎯 Hero Feature: AI Critique Engine + Multi-Agent Refinement
+    🤖 Agents: Generator → Descriptor → Critic → Refinement
     """)
     
     uvicorn.run(
