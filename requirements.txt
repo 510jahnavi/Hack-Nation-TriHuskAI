@@ -1,0 +1,54 @@
+# Core Web Framework
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Google Cloud AI
+google-cloud-aiplatform>=1.30.0
+google-generativeai>=0.3.0
+
+# Image and Video Processing
+opencv-python==4.10.0.84
+Pillow>=10.0.0
+numpy>=1.24.0
+
+# Machine Learning
+transformers>=4.30.0
+torch>=2.0.0
+torchvision>=0.15.0
+
+# CLIP for brand similarity
+clip-anytorch==2.6.0
+
+# HTTP Requests
+requests==2.31.0
+httpx==0.25.2
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# Data Validation and Serialization
+python-json-logger==2.0.7
+
+# CORS
+fastapi-cors==0.0.6
+
+# Color Analysis
+colorthief==0.2.1
+webcolors==1.13
+
+# Template Engine
+jinja2==3.1.2
+
+# Database (Optional - for storing critiques)
+sqlalchemy==2.0.23
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Code Quality
+black==23.11.0
+flake8==6.1.0
