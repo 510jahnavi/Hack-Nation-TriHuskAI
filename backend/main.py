@@ -1,7 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from pathlib import Path
 import uvicorn
 import os
 import sys
@@ -10,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
-from app.api import critique, generate, brand_kit, multi_agent
+from app.api import critique, generate, brand_kit, multi_agent, approval
 
 # Create necessary directories
 os.makedirs(settings.upload_dir, exist_ok=True)
@@ -37,11 +38,26 @@ app.include_router(critique.router, prefix="/api", tags=["Critique"])
 app.include_router(generate.router, prefix="/api", tags=["Generate"])
 app.include_router(brand_kit.router, prefix="/api", tags=["Brand Kit"])
 app.include_router(multi_agent.router, prefix="/api/multi-agent", tags=["Multi-Agent Workflow"])
+app.include_router(approval.router, prefix="/api/approval", tags=["Human Approval"])
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
+    """Redirect to frontend"""
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    return FileResponse(frontend_path)
+
+
+@app.get("/app")
+async def serve_frontend():
+    """Root endpoint serves the frontend"""
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    return FileResponse(frontend_path)
+
+
+@app.get("/api")
+async def api_root():
+    """API root endpoint with API information"""
     return {
         "name": "BrandAI API",
         "version": "1.0.0",

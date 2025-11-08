@@ -48,6 +48,43 @@ async def generate_ad(
         raise HTTPException(status_code=500, detail=f"Generation failed: {str(e)}")
 
 
+@router.post("/generate-variants")
+async def generate_variants(
+    brand_id: str = Form(...),
+    product_name: str = Form(...),
+    product_description: str = Form(...),
+    tagline: Optional[str] = Form(None),
+    style: str = Form("modern"),
+    media_type: str = Form("image"),
+    num_variants: int = Form(3)
+):
+    """
+    Generate multiple ad variants (A, B, C) for comparison
+    
+    Returns 3 different versions with prompt variations:
+    - Variant A: Bold and vibrant (product prominence)
+    - Variant B: Minimal and clean (brand identity)
+    - Variant C: Dynamic and energetic (CTA clarity)
+    
+    This allows comparing different approaches before critique.
+    """
+    
+    request = GenerateAdRequest(
+        brand_id=brand_id,
+        product_name=product_name,
+        product_description=product_description,
+        tagline=tagline,
+        style=style,
+        media_type=media_type
+    )
+    
+    try:
+        result = await generation_service.generate_variants(request, num_variants)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Variant generation failed: {str(e)}")
+
+
 @router.post("/improve-ad")
 async def improve_ad(
     critique_id: str = Form(...),

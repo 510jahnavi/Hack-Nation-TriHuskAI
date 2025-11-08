@@ -256,12 +256,52 @@
                         <div id="iterations-container"></div>
                     </div>
                 </div>
+
+                <!-- Before/After Comparison -->
+                <div id="comparison-view" class="mt-8 hidden">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-2xl font-bold mb-6">📊 Before vs After Comparison</h3>
+                        <div id="comparison-container" class="grid md:grid-cols-2 gap-6"></div>
+                        
+                        <!-- Approval Actions -->
+                        <div id="approval-actions" class="mt-6 pt-6 border-t">
+                            <h4 class="font-bold mb-4">Final Decision</h4>
+                            <div class="flex gap-4">
+                                <button onclick="approveAd()" class="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 font-medium">
+                                    ✅ Approve & Deploy
+                                </button>
+                                <button onclick="requestRevision()" class="flex-1 bg-yellow-600 text-white py-3 px-6 rounded-lg hover:bg-yellow-700 font-medium">
+                                    🔄 Request Revision
+                                </button>
+                                <button onclick="rejectAd()" class="flex-1 bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 font-medium">
+                                    ❌ Reject
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
 
     <script>
         const API_BASE = 'http://localhost:8000/api';
+
+        // Helper functions
+        function getScoreClass(level) {
+            if (typeof level === 'string') {
+                return `score-${level.toLowerCase()}`;
+            }
+            // If it's a number (0-1 score)
+            if (level >= 0.9) return 'score-excellent';
+            if (level >= 0.75) return 'score-good';
+            if (level >= 0.5) return 'score-fair';
+            return 'score-poor';
+        }
+
+        function getScorePercent(score) {
+            return Math.round(score * 100);
+        }
 
         // Tab switching
         function showTab(tabName) {
@@ -525,9 +565,16 @@
                         </div>
                     ` : ''}
                     
-                    <button onclick="showIterationDetails()" class="text-indigo-600 hover:text-indigo-800 font-medium text-sm">
-                        📊 View Detailed Iteration History →
-                    </button>
+                    <div class="flex gap-3 border-t pt-4">
+                        <button onclick="showIterationDetails()" class="flex-1 text-indigo-600 hover:text-indigo-800 font-medium text-sm">
+                            📊 View Iteration History →
+                        </button>
+                        ${workflow.iterations.length > 0 ? `
+                            <button onclick="showComparison(window.currentWorkflow)" class="flex-1 bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 font-medium text-sm">
+                                🔍 Compare Before & After →
+                            </button>
+                        ` : ''}
+                    </div>
                 </div>
             `;
             
@@ -598,6 +645,232 @@
 
         function showIterationDetails() {
             document.getElementById('iteration-history').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Comparison View Functions
+        function showComparison(workflow) {
+            if (!workflow.iterations || workflow.iterations.length < 2) return;
+            
+            const comparisonView = document.getElementById('comparison-view');
+            const container = document.getElementById('comparison-container');
+            
+            const firstIteration = workflow.iterations[0];
+            const lastIteration = workflow.iterations[workflow.iterations.length - 1];
+            
+            container.innerHTML = `
+                <!-- BEFORE (First Iteration) -->
+                <div class="border-2 border-red-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-bold text-lg">❌ BEFORE (Iteration 1)</h4>
+                        <span class="text-2xl font-bold ${getScoreClass(firstIteration.overall_score)}">
+                            ${(firstIteration.overall_score * 100).toFixed(0)}%
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-2 text-sm">
+                        <p class="text-gray-700"><strong>Prompt:</strong> ${firstIteration.prompt.substring(0, 100)}...</p>
+                        
+                        ${firstIteration.critique ? `
+                            <div class="grid grid-cols-2 gap-2 mt-3">
+                                <div class="bg-red-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Brand</div>
+                                    <div class="font-bold">${(firstIteration.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-red-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Quality</div>
+                                    <div class="font-bold">${(firstIteration.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-red-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Clarity</div>
+                                    <div class="font-bold">${(firstIteration.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-red-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Safety</div>
+                                    <div class="font-bold">${(firstIteration.critique.scores?.safety * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${firstIteration.critique?.issues ? `
+                            <div class="bg-red-50 border border-red-200 rounded p-2 mt-2">
+                                <div class="text-xs font-semibold text-red-800 mb-1">Issues Found:</div>
+                                <ul class="text-xs text-red-700 list-disc list-inside">
+                                    ${firstIteration.critique.issues.slice(0, 3).map(i => `<li>${i}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <!-- AFTER (Last Iteration) -->
+                <div class="border-2 border-green-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-bold text-lg">✅ AFTER (Iteration ${lastIteration.iteration})</h4>
+                        <span class="text-2xl font-bold ${getScoreClass(lastIteration.overall_score)}">
+                            ${(lastIteration.overall_score * 100).toFixed(0)}%
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-2 text-sm">
+                        <p class="text-gray-700"><strong>Prompt:</strong> ${lastIteration.prompt.substring(0, 100)}...</p>
+                        
+                        ${lastIteration.critique ? `
+                            <div class="grid grid-cols-2 gap-2 mt-3">
+                                <div class="bg-green-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Brand</div>
+                                    <div class="font-bold">${(lastIteration.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-green-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Quality</div>
+                                    <div class="font-bold">${(lastIteration.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-green-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Clarity</div>
+                                    <div class="font-bold">${(lastIteration.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                                <div class="bg-green-50 p-2 rounded">
+                                    <div class="text-xs text-gray-600">Safety</div>
+                                    <div class="font-bold">${(lastIteration.critique.scores?.safety * 100 || 0).toFixed(0)}%</div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${lastIteration.refinement && lastIteration.refinement.changes_made ? `
+                            <div class="bg-green-50 border border-green-200 rounded p-2 mt-2">
+                                <div class="text-xs font-semibold text-green-800 mb-1">Improvements Made:</div>
+                                <ul class="text-xs text-green-700 list-disc list-inside">
+                                    ${lastIteration.refinement.changes_made.slice(0, 3).map(c => `<li>${c}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <!-- Improvement Summary -->
+                <div class="col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h5 class="font-bold text-blue-900 mb-2">📈 Improvement Summary</h5>
+                    <div class="grid grid-cols-4 gap-4 text-center">
+                        <div>
+                            <div class="text-xs text-gray-600">Score Change</div>
+                            <div class="text-2xl font-bold text-blue-900">
+                                +${((lastIteration.overall_score - firstIteration.overall_score) * 100).toFixed(0)}%
+                            </div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-600">Iterations</div>
+                            <div class="text-2xl font-bold text-blue-900">${workflow.iterations_count}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-600">Duration</div>
+                            <div class="text-2xl font-bold text-blue-900">${workflow.workflow_duration_seconds.toFixed(1)}s</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-gray-600">Status</div>
+                            <div class="text-lg font-bold ${workflow.threshold_met ? 'text-green-600' : 'text-yellow-600'}">
+                                ${workflow.threshold_met ? '✅ Passed' : '⚠️ Below Target'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            comparisonView.classList.remove('hidden');
+            window.currentAdId = workflow.best_ad?.image_path || 'demo_ad_' + Date.now();
+        }
+
+        // Approval Functions
+        async function approveAd() {
+            if (!window.currentAdId) {
+                alert('No ad selected for approval');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/approval/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ad_id: window.currentAdId,
+                        decision: 'approve',
+                        feedback: 'Approved after multi-agent refinement',
+                        approved_by: 'demo_user'
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert('✅ ' + result.message);
+                    document.getElementById('approval-actions').innerHTML = `
+                        <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+                            <strong>Ad Approved!</strong> Ready for deployment to social media.
+                        </div>
+                    `;
+                } else {
+                    alert('Approval failed');
+                }
+            } catch (error) {
+                console.error('Approval error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function requestRevision() {
+            const feedback = prompt('Enter revision feedback:');
+            if (!feedback) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/approval/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ad_id: window.currentAdId,
+                        decision: 'request_revision',
+                        feedback: feedback
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert('🔄 ' + result.message);
+                } else {
+                    alert('Request failed');
+                }
+            } catch (error) {
+                console.error('Revision request error:', error);
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function rejectAd() {
+            const reason = prompt('Enter rejection reason:');
+            if (!reason) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/approval/approve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ad_id: window.currentAdId,
+                        decision: 'reject',
+                        feedback: reason
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    alert('❌ ' + result.message);
+                    document.getElementById('approval-actions').innerHTML = `
+                        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+                            <strong>Ad Rejected.</strong> Will not be deployed.
+                        </div>
+                    `;
+                } else {
+                    alert('Rejection failed');
+                }
+            } catch (error) {
+                console.error('Rejection error:', error);
+                alert('Error: ' + error.message);
+            }
         }
 
         // Load brand kits on page load

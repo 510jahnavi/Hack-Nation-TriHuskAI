@@ -51,17 +51,9 @@ class MultiAgentOrchestrator:
         
         # Initialize agents
         self.descriptor = DescriptorAgent(api_key=gemini_api_key)
-        self.critic = CritiqueEngine(
-            gemini_api_key=gemini_api_key,
-            vertex_project_id=vertex_project_id,
-            vertex_location=vertex_location
-        )
+        self.critic = CritiqueEngine()  # Reads from settings internally
         self.refinement = RefinementAgent(api_key=gemini_api_key)
-        self.generator = GenerationService(
-            gemini_api_key=gemini_api_key,
-            vertex_project_id=vertex_project_id,
-            vertex_location=vertex_location
-        )
+        self.generator = GenerationService()  # Reads from settings internally
         
         logger.info(f"Multi-Agent Orchestrator initialized (max_iter={max_iterations}, threshold={score_threshold})")
     
@@ -108,12 +100,18 @@ class MultiAgentOrchestrator:
             # Step 1: Generate Ad
             logger.info(f"[{iteration}] Generating ad...")
             try:
-                gen_result = await self.generator.generate_ad(
-                    prompt=current_prompt,
-                    brand_kit_id=brand_kit_id,
-                    aspect_ratio=aspect_ratio,
-                    include_logo=include_logo
+                # Create GenerateAdRequest object
+                from app.models.schemas import GenerateAdRequest
+                gen_request = GenerateAdRequest(
+                    brand_id=brand_kit_id,
+                    product_name=current_prompt.split('\n')[0] if '\n' in current_prompt else "Product",
+                    product_description=current_prompt,
+                    tagline="",
+                    style="modern",
+                    media_type="image"
                 )
+                
+                gen_result = await self.generator.generate_ad(gen_request)
                 iteration_result["generation"] = {
                     "success": gen_result.get("success", False),
                     "image_path": gen_result.get("image_path"),
@@ -149,8 +147,7 @@ class MultiAgentOrchestrator:
             try:
                 critique = await self.critic.critique_ad(
                     image_path=ad_path,
-                    brand_kit_id=brand_kit_id,
-                    brand_kit_data=brand_kit_data
+                    brand_kit=brand_kit_data
                 )
                 iteration_result["critique"] = critique
                 
