@@ -24,7 +24,7 @@ class DescriptorAgent:
         self.api_key = api_key
         if api_key:
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            self.model = genai.GenerativeModel('gemini-2.0-flash')
         else:
             self.model = None
             logger.warning("Descriptor Agent initialized without Gemini API key - using fallback mode")
@@ -106,6 +106,7 @@ Extract and describe the following components:
 
 Output your analysis as a JSON object with the following structure:
 {
+  "summary": "A 2-3 sentence human-readable description of what you see in the ad",
   "visual_elements": {
     "colors": ["color1", "color2", ...],
     "objects": ["object1", "object2", ...],
@@ -196,11 +197,14 @@ Return ONLY the JSON object, no additional text."""
             img_array = np.array(img)
             avg_color = img_array.mean(axis=(0, 1))
             
+            aspect = "landscape" if width > height else "portrait" if height > width else "square"
+            
             return {
                 "source": "fallback",
+                "summary": f"A {aspect} advertisement image ({width}x{height}px). Detailed analysis requires Gemini Vision API.",
                 "visual_elements": {
                     "dimensions": f"{width}x{height}",
-                    "aspect_ratio": "landscape" if width > height else "portrait" if height > width else "square",
+                    "aspect_ratio": aspect,
                     "average_color_rgb": avg_color.tolist() if isinstance(avg_color, np.ndarray) else "unknown",
                     "quality": "unknown - API key required for detailed analysis"
                 },
@@ -214,7 +218,7 @@ Return ONLY the JSON object, no additional text."""
                     "note": "Tone analysis requires Gemini API key"
                 },
                 "technical_aspects": {
-                    "aspect_ratio": "landscape" if width > height else "portrait" if height > width else "square",
+                    "aspect_ratio": aspect,
                     "note": "Detailed analysis requires Gemini API key"
                 },
                 "product_info": {

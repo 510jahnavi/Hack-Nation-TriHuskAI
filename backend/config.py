@@ -19,9 +19,9 @@ class Settings(BaseSettings):
     
     # Upload Settings
     max_upload_size: int = 50000000  # 50MB
-    upload_dir: str = "uploads"
+    upload_dir: str = "backend/uploads"
     brand_kit_dir: str = "brand_kits"
-    generated_ads_dir: str = "generated_ads"
+    generated_ads_dir: str = "backend/generated_ads"
     
     # Critique Thresholds
     min_brand_score: float = 0.7

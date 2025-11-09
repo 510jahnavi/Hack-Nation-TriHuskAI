@@ -3,7 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BrandAI - AI Ad Critique System</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>BrandAI - AI Ad Critique System v2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .score-excellent { color: #10b981; }
@@ -216,10 +219,65 @@
                             </div>
                             
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Brand Kit (Optional)</label>
-                                <select id="ma-brand-select" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                                    <option value="">None - Generic</option>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Brand Kit 
+                                    <button type="button" onclick="loadBrandKits()" class="ml-2 text-xs text-indigo-600 hover:text-indigo-800">
+                                        🔄 Refresh
+                                    </button>
+                                </label>
+                                <select id="ma-brand-select" onchange="updateBrandPreview(this)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">Loading brand kits...</option>
                                 </select>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    <span id="brand-preview"></span>
+                                    <span id="brand-hint">Select a brand kit or leave empty for generic evaluation</span>
+                                </p>
+                            </div>
+                            
+                            <!-- File Upload Section -->
+                            <div class="grid grid-cols-2 gap-4 pt-4 border-t">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                                        🏷️ Brand Logo (Optional)
+                                    </label>
+                                    <input type="file" id="ma-brand-logo" accept="image/*" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                                        onchange="handleLogoPreview(this)">
+                                    <div id="logo-preview-ma" class="mt-2 text-xs text-gray-500"></div>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                                        📸 Product Image (Optional)
+                                    </label>
+                                    <input type="file" id="ma-product-image" accept="image/*" 
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+                                        onchange="handleProductPreview(this)">
+                                    <div id="product-preview-ma" class="mt-2 text-xs text-gray-500"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Media Type Selection -->
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Media Type</label>
+                                <div class="flex gap-4">
+                                    <label class="flex items-center">
+                                        <input type="radio" name="media-type" value="image" checked class="mr-2">
+                                        <span class="text-sm">📸 Image</span>
+                                    </label>
+                                    <label class="flex items-center">
+                                        <input type="radio" name="media-type" value="video" class="mr-2">
+                                        <span class="text-sm">🎬 Video</span>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <!-- Video Duration (shown when video is selected) -->
+                            <div id="video-settings" class="hidden">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">
+                                    Video Duration: <span id="duration-value">10</span>s
+                                </label>
+                                <input type="range" id="video-duration" min="5" max="15" value="10" 
+                                    class="w-full" onchange="document.getElementById('duration-value').textContent = this.value">
                             </div>
                             
                             <div>
@@ -303,6 +361,21 @@
             return Math.round(score * 100);
         }
 
+        // Clean image path for display
+        function cleanImagePath(path) {
+            if (!path) return '';
+            // Convert backslashes to forward slashes (Windows paths)
+            let cleanPath = path.replace(/\\/g, '/');
+            // Remove 'backend/' prefix if present
+            cleanPath = cleanPath.replace(/^backend\//, '');
+            // Ensure it starts with /
+            if (!cleanPath.startsWith('/')) {
+                cleanPath = '/' + cleanPath;
+            }
+            console.log('🧹 cleanImagePath:', path, '→', cleanPath);
+            return cleanPath;
+        }
+
         // Tab switching
         function showTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
@@ -328,28 +401,70 @@
                     document.getElementById('gen-brand-select'),
                     document.getElementById('ma-brand-select')
                 ];
+                
                 selects.forEach(select => {
-                    select.innerHTML = '<option value="">Select a brand...</option>';
-                    brands.forEach(brand => {
-                        select.innerHTML += `<option value="${brand.brand_id}">${brand.brand_name}</option>`;
-                    });
+                    if (!select) return; // Skip if element doesn't exist
+                    
+                    if (brands.length === 0) {
+                        select.innerHTML = '<option value="">No brand kits created yet</option>';
+                    } else {
+                        select.innerHTML = '<option value="">None - Generic evaluation</option>';
+                        brands.forEach(brand => {
+                            const colors = brand.primary_colors ? brand.primary_colors.slice(0, 3).join(', ') : 'No colors';
+                            select.innerHTML += `<option value="${brand.brand_id}">${brand.brand_name} (${colors})</option>`;
+                        });
+                    }
                 });
                 
                 // Update brand list
                 const list = document.getElementById('brand-list');
-                if (brands.length === 0) {
-                    list.innerHTML = '<p class="text-gray-500">No brand kits yet...</p>';
-                } else {
-                    list.innerHTML = brands.map(brand => `
-                        <div class="border border-gray-200 rounded p-3">
-                            <h3 class="font-semibold">${brand.brand_name}</h3>
-                            <p class="text-sm text-gray-600">Colors: ${brand.primary_colors.join(', ')}</p>
-                            <p class="text-sm text-gray-600">Tone: ${brand.tone_of_voice.join(', ')}</p>
-                        </div>
-                    `).join('');
+                if (list) {
+                    if (brands.length === 0) {
+                        list.innerHTML = '<p class="text-gray-500">No brand kits yet. Create one above!</p>';
+                    } else {
+                        list.innerHTML = brands.map(brand => `
+                            <div class="border border-gray-200 rounded p-4 hover:border-indigo-300 transition">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-semibold text-lg">${brand.brand_name}</h3>
+                                    <span class="text-xs text-gray-500">${brand.brand_id.substring(0, 8)}...</span>
+                                </div>
+                                <div class="space-y-1 text-sm">
+                                    <p class="text-gray-600">
+                                        <span class="font-medium">Colors:</span> 
+                                        ${brand.primary_colors.map(c => `<span class="inline-block w-4 h-4 rounded-full border border-gray-300 mr-1" style="background-color: ${c}"></span>`).join('')}
+                                        ${brand.primary_colors.join(', ')}
+                                    </p>
+                                    <p class="text-gray-600">
+                                        <span class="font-medium">Tone:</span> ${brand.tone_of_voice.join(', ')}
+                                    </p>
+                                    ${brand.brand_values && brand.brand_values.length > 0 ? `
+                                        <p class="text-gray-600">
+                                            <span class="font-medium">Values:</span> ${brand.brand_values.join(', ')}
+                                        </p>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `).join('');
+                    }
                 }
+                
+                console.log(`✅ Loaded ${brands.length} brand kit(s)`);
+                
             } catch (error) {
                 console.error('Error loading brand kits:', error);
+                
+                // Show error in dropdowns
+                const selects = [
+                    document.getElementById('brand-select'), 
+                    document.getElementById('gen-brand-select'),
+                    document.getElementById('ma-brand-select')
+                ];
+                
+                selects.forEach(select => {
+                    if (select) {
+                        select.innerHTML = '<option value="">Error loading brand kits</option>';
+                    }
+                });
             }
         }
 
@@ -492,19 +607,62 @@
         document.getElementById('multi-agent-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const payload = {
-                prompt: document.getElementById('ma-prompt').value,
-                brand_kit_id: document.getElementById('ma-brand-select').value || null,
-                max_iterations: parseInt(document.getElementById('max-iterations').value),
-                score_threshold: parseFloat(document.getElementById('score-threshold').value),
-                aspect_ratio: "1:1",
-                include_logo: true
-            };
-            
             const results = document.getElementById('multi-agent-results');
-            results.innerHTML = '<div class="text-center py-8"><div class="animate-spin text-4xl">🤖</div><p class="mt-2">Running multi-agent workflow...</p></div>';
+            results.innerHTML = '<div class="text-center py-8"><div class="animate-spin text-4xl">🤖</div><p class="mt-2">Running multi-agent workflow...</p><p class="text-sm text-gray-500 mt-2">Uploading files and generating ad...</p></div>';
             
             try {
+                // Upload brand logo if provided
+                let logoPath = null;
+                const logoFile = document.getElementById('ma-brand-logo').files[0];
+                if (logoFile) {
+                    const logoFormData = new FormData();
+                    logoFormData.append('file', logoFile);
+                    const logoResponse = await fetch(`${API_BASE}/upload/brand-logo`, {
+                        method: 'POST',
+                        body: logoFormData
+                    });
+                    if (logoResponse.ok) {
+                        const logoResult = await logoResponse.json();
+                        logoPath = logoResult.file_path;
+                        console.log('✅ Logo uploaded:', logoPath);
+                    }
+                }
+                
+                // Upload product image if provided
+                let productPath = null;
+                const productFile = document.getElementById('ma-product-image').files[0];
+                if (productFile) {
+                    const productFormData = new FormData();
+                    productFormData.append('file', productFile);
+                    const productResponse = await fetch(`${API_BASE}/upload/product-image`, {
+                        method: 'POST',
+                        body: productFormData
+                    });
+                    if (productResponse.ok) {
+                        const productResult = await productResponse.json();
+                        productPath = productResult.file_path;
+                        console.log('✅ Product image uploaded:', productPath);
+                    }
+                }
+                
+                // Get media type
+                const mediaType = document.querySelector('input[name="media-type"]:checked').value;
+                
+                const payload = {
+                    prompt: document.getElementById('ma-prompt').value,
+                    brand_kit_id: document.getElementById('ma-brand-select').value || null,
+                    media_type: mediaType,
+                    duration: mediaType === 'video' ? parseInt(document.getElementById('video-duration').value) : 10,
+                    max_iterations: parseInt(document.getElementById('max-iterations').value),
+                    score_threshold: parseFloat(document.getElementById('score-threshold').value),
+                    aspect_ratio: "1:1",
+                    include_logo: true,
+                    brand_logo_path: logoPath,
+                    product_image_path: productPath
+                };
+                
+                console.log('🚀 Sending request:', payload);
+                
                 const response = await fetch(`${API_BASE}/multi-agent/generate-and-refine`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -513,6 +671,9 @@
                 
                 if (response.ok) {
                     const workflow = await response.json();
+                    console.log('✅ Workflow response:', workflow);
+                    console.log('📸 Best ad image path:', workflow.best_ad?.image_path);
+                    console.log('🎬 Best ad video path:', workflow.best_ad?.video_path);
                     displayMultiAgentResults(workflow);
                 } else {
                     const error = await response.json();
@@ -524,9 +685,48 @@
             }
         });
 
+        // Toggle video settings visibility
+        document.querySelectorAll('input[name="media-type"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const videoSettings = document.getElementById('video-settings');
+                if (this.value === 'video') {
+                    videoSettings.classList.remove('hidden');
+                } else {
+                    videoSettings.classList.add('hidden');
+                }
+            });
+        });
+
+        // File preview handlers
+        function handleLogoPreview(input) {
+            const preview = document.getElementById('logo-preview-ma');
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                preview.innerHTML = `✅ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
+        function handleProductPreview(input) {
+            const preview = document.getElementById('product-preview-ma');
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                preview.innerHTML = `✅ ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
         function displayMultiAgentResults(workflow) {
             const results = document.getElementById('multi-agent-results');
             const bestAd = workflow.best_ad;
+            
+            console.log('🔍 displayMultiAgentResults called');
+            console.log('📦 Full workflow object:', workflow);
+            console.log('🎯 bestAd object:', bestAd);
+            console.log('📸 Image path from bestAd:', bestAd?.image_path);
+            console.log('🧹 Cleaned path:', cleanImagePath(bestAd?.image_path));
             
             let statusBadge = '';
             if (workflow.threshold_met) {
@@ -557,10 +757,40 @@
                     
                     ${bestAd ? `
                         <div class="border-t pt-4">
-                            <h5 class="font-semibold mb-2">Best Ad: Iteration ${bestAd.iteration}</h5>
+                            <h5 class="font-semibold mb-3">Best Ad: Iteration ${bestAd.iteration}</h5>
+                            
+                            <!-- Display Generated Media -->
+                            ${bestAd.video_path || bestAd.image_path ? `
+                                <div class="bg-gray-900 rounded-lg overflow-hidden mb-3">
+                                    ${bestAd.video_path ? `
+                                        <video controls class="w-full" style="max-height: 400px;">
+                                            <source src="${cleanImagePath(bestAd.video_path)}" type="video/mp4">
+                                            Your browser does not support video playback.
+                                        </video>
+                                    ` : `
+                                        <img src="${cleanImagePath(bestAd.image_path)}" 
+                                             alt="Generated Ad" 
+                                             class="w-full" 
+                                             style="max-height: 400px; object-fit: contain;"
+                                             onerror="console.error('❌ Image failed to load:', this.src); this.style.border='3px solid red';">
+                                    `}
+                                </div>
+                                <div class="flex gap-2 mb-3">
+                                    <a href="${cleanImagePath(bestAd.video_path || bestAd.image_path)}" download 
+                                       class="flex-1 bg-green-600 text-white px-4 py-2 rounded text-center hover:bg-green-700 font-medium text-sm">
+                                        ⬇️ Download ${bestAd.video_path ? 'Video' : 'Image'}
+                                    </a>
+                                    <a href="${cleanImagePath(bestAd.video_path || bestAd.image_path)}" target="_blank"
+                                       class="flex-1 bg-blue-600 text-white px-4 py-2 rounded text-center hover:bg-blue-700 font-medium text-sm">
+                                        🔍 View Full Size
+                                    </a>
+                                </div>
+                            ` : ''}
+                            
                             <div class="bg-gray-100 p-3 rounded text-sm">
                                 <p class="text-gray-700"><strong>Prompt:</strong> ${bestAd.prompt.substring(0, 100)}${bestAd.prompt.length > 100 ? '...' : ''}</p>
-                                <p class="text-gray-700 mt-2"><strong>Path:</strong> ${bestAd.image_path}</p>
+                                <p class="text-gray-700 mt-2"><strong>Media Type:</strong> ${bestAd.media_type || 'image'}</p>
+                                ${bestAd.video_path ? `<p class="text-gray-700 mt-1"><strong>Duration:</strong> ${bestAd.duration || 10}s</p>` : ''}
                             </div>
                         </div>
                     ` : ''}
@@ -596,41 +826,327 @@
                     <div class="border rounded-lg p-4 ${iter.status === 'success' ? 'border-green-300 bg-green-50' : 'border-gray-200'}">
                         <div class="flex items-center justify-between mb-3">
                             <h4 class="font-bold">Iteration ${iter.iteration}</h4>
-                            <div class="flex items-center gap-2">
-                                <span class="${scoreClass} font-semibold">${score}%</span>
-                                ${iter.status === 'success' ? '<span class="text-green-600">✓</span>' : ''}
+                            <div class="flex items-center gap-3">
+                                <span class="${scoreClass} font-semibold text-2xl">${score}%</span>
+                                ${iter.status === 'success' ? '<span class="text-green-600 text-2xl">✓</span>' : ''}
                             </div>
                         </div>
                         
-                        <div class="text-sm space-y-2">
-                            <p class="text-gray-700"><strong>Prompt:</strong> ${iter.prompt.substring(0, 150)}${iter.prompt.length > 150 ? '...' : ''}</p>
+                        <!-- User-Friendly Results Card -->
+                        <div class="bg-white rounded-lg p-4 mb-3 shadow-sm">
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <!-- Ad Preview -->
+                                ${iter.generation && (iter.generation.image_path || iter.generation.video_path) ? `
+                                    <div class="col-span-2">
+                                        <div class="text-xs font-semibold text-gray-600 mb-2">
+                                            ${iter.generation.video_path ? '🎬 Generated Video:' : '📸 Generated Image:'}
+                                        </div>
+                                        <div class="relative group bg-gray-900 rounded overflow-hidden">
+                                            ${iter.generation.video_path ? `
+                                                <video controls class="w-full" style="max-height: 300px;">
+                                                    <source src="${cleanImagePath(iter.generation.video_path)}" type="video/mp4">
+                                                </video>
+                                            ` : `
+                                                <img src="${cleanImagePath(iter.generation.image_path)}" alt="Generated Ad" class="w-full rounded border border-gray-200" style="max-height: 300px; object-fit: contain;">
+                                            `}
+                                            <a href="${cleanImagePath(iter.generation.video_path || iter.generation.image_path)}" download 
+                                               class="absolute top-2 right-2 bg-indigo-600 text-white px-3 py-1 rounded-lg text-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-indigo-700">
+                                                ⬇️ Download
+                                            </a>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                <!-- Prompt Used -->
+                                <div class="col-span-2 bg-gray-50 p-3 rounded">
+                                    <div class="text-xs font-semibold text-gray-600 mb-1">💬 Prompt:</div>
+                                    <p class="text-sm text-gray-700">${iter.prompt}</p>
+                                </div>
+                            </div>
                             
-                            ${iter.critique ? `
-                                <div class="grid grid-cols-4 gap-2 mt-2">
-                                    <div class="bg-white p-2 rounded text-center">
-                                        <div class="text-xs text-gray-600">Brand</div>
-                                        <div class="font-semibold">${(iter.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</div>
-                                    </div>
-                                    <div class="bg-white p-2 rounded text-center">
-                                        <div class="text-xs text-gray-600">Quality</div>
-                                        <div class="font-semibold">${(iter.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</div>
-                                    </div>
-                                    <div class="bg-white p-2 rounded text-center">
-                                        <div class="text-xs text-gray-600">Clarity</div>
-                                        <div class="font-semibold">${(iter.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</div>
-                                    </div>
-                                    <div class="bg-white p-2 rounded text-center">
-                                        <div class="text-xs text-gray-600">Safety</div>
-                                        <div class="font-semibold">${(iter.critique.scores?.safety * 100 || 0).toFixed(0)}%</div>
-                                    </div>
+                            ${iter.description && iter.description.summary ? `
+                                <div class="bg-purple-50 border border-purple-200 rounded p-3 mb-3">
+                                    <div class="text-xs font-semibold text-purple-800 mb-1">🔍 What Descriptor Saw:</div>
+                                    <p class="text-sm text-purple-700">${iter.description.summary}</p>
                                 </div>
                             ` : ''}
                             
+                            ${iter.critique ? `
+                                <!-- Critique Scores -->
+                                <div class="mb-3">
+                                    <div class="text-xs font-semibold text-gray-600 mb-2">⚖️ Quality Scores:</div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div class="bg-gradient-to-r from-blue-50 to-blue-100 p-3 rounded text-center">
+                                            <div class="text-xs text-gray-600">Brand Alignment</div>
+                                            <div class="text-xl font-bold text-blue-900">${(iter.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</div>
+                                            ${iter.critique.confidence_scores?.brand_alignment ? `
+                                                <div class="text-xs text-gray-500 mt-1">
+                                                    ${iter.critique.confidence_scores.brand_alignment >= 0.7 ? '🟢' : '🟡'} 
+                                                    ${(iter.critique.confidence_scores.brand_alignment * 100).toFixed(0)}% conf
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div class="bg-gradient-to-r from-green-50 to-green-100 p-3 rounded text-center">
+                                            <div class="text-xs text-gray-600">Visual Quality</div>
+                                            <div class="text-xl font-bold text-green-900">${(iter.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</div>
+                                            ${iter.critique.confidence_scores?.visual_quality ? `
+                                                <div class="text-xs text-gray-500 mt-1">
+                                                    ${iter.critique.confidence_scores.visual_quality >= 0.7 ? '🟢' : '🟡'} 
+                                                    ${(iter.critique.confidence_scores.visual_quality * 100).toFixed(0)}% conf
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div class="bg-gradient-to-r from-yellow-50 to-yellow-100 p-3 rounded text-center">
+                                            <div class="text-xs text-gray-600">Message Clarity</div>
+                                            <div class="text-xl font-bold text-yellow-900">${(iter.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</div>
+                                            ${iter.critique.confidence_scores?.message_clarity ? `
+                                                <div class="text-xs text-gray-500 mt-1">
+                                                    ${iter.critique.confidence_scores.message_clarity >= 0.7 ? '🟢' : '🟡'} 
+                                                    ${(iter.critique.confidence_scores.message_clarity * 100).toFixed(0)}% conf
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div class="bg-gradient-to-r from-purple-50 to-purple-100 p-3 rounded text-center">
+                                            <div class="text-xs text-gray-600">Safety</div>
+                                            <div class="text-xl font-bold text-purple-900">${(iter.critique.scores?.safety * 100 || 0).toFixed(0)}%</div>
+                                            ${iter.critique.confidence_scores?.safety ? `
+                                                <div class="text-xs text-gray-500 mt-1">
+                                                    ${iter.critique.confidence_scores.safety >= 0.7 ? '🟢' : '🟡'} 
+                                                    ${(iter.critique.confidence_scores.safety * 100).toFixed(0)}% conf
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Overall Confidence Warning -->
+                                    ${iter.critique.needs_manual_review ? `
+                                        <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 mt-3">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0">⚠️</div>
+                                                <div class="ml-3">
+                                                    <p class="text-sm text-yellow-800 font-semibold">Manual Review Recommended</p>
+                                                    <p class="text-xs text-yellow-700 mt-1">
+                                                        AI confidence: ${(iter.critique.confidence_scores?.overall * 100 || 0).toFixed(0)}%
+                                                        ${iter.critique.low_confidence_areas?.length > 0 ? 
+                                                            `<br>Low confidence in: ${iter.critique.low_confidence_areas.join(', ')}` : ''}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ` : iter.critique.confidence_scores?.overall >= 0.85 ? `
+                                        <div class="bg-green-50 border-l-4 border-green-400 p-2 mt-3">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0">✅</div>
+                                                <div class="ml-2">
+                                                    <p class="text-xs text-green-700">
+                                                        High AI confidence: ${(iter.critique.confidence_scores.overall * 100).toFixed(0)}%
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- Detailed Critique Feedback -->
+                                ${iter.critique.feedback ? `
+                                    <div class="space-y-3 mt-3">
+                                        <!-- Brand Alignment Details -->
+                                        ${iter.critique.feedback.brand_alignment ? `
+                                            <details class="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-300 rounded-lg p-3 shadow-sm">
+                                                <summary class="cursor-pointer font-semibold text-blue-900 flex items-center justify-between">
+                                                    <span>🎨 Brand Alignment - ${(iter.critique.scores?.brand_alignment * 100 || 0).toFixed(0)}%</span>
+                                                    <span class="text-xs text-blue-700">(Click for details)</span>
+                                                </summary>
+                                                <div class="mt-3 space-y-2 text-sm">
+                                                    <p><strong>Summary:</strong> ${iter.critique.feedback.brand_alignment.feedback || 'No feedback'}</p>
+                                                    ${iter.critique.feedback.brand_alignment.score_explanation ? `
+                                                        <p><strong>Score Explanation:</strong> ${iter.critique.feedback.brand_alignment.score_explanation}</p>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.brand_alignment.specific_observations && iter.critique.feedback.brand_alignment.specific_observations.length > 0 ? `
+                                                        <div>
+                                                            <strong>Observations:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1">
+                                                                ${iter.critique.feedback.brand_alignment.specific_observations.map(obs => `<li>${obs}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.brand_alignment.issues && iter.critique.feedback.brand_alignment.issues.length > 0 ? `
+                                                        <div>
+                                                            <strong>Issues:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-red-700">
+                                                                ${iter.critique.feedback.brand_alignment.issues.map(issue => `<li>${issue}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.brand_alignment.suggestions && iter.critique.feedback.brand_alignment.suggestions.length > 0 ? `
+                                                        <div>
+                                                            <strong>Suggestions:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-green-700">
+                                                                ${iter.critique.feedback.brand_alignment.suggestions.map(s => `<li>${s}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </details>
+                                        ` : ''}
+
+                                        <!-- Visual Quality Details -->
+                                        ${iter.critique.feedback.visual_quality ? `
+                                            <details class="bg-gradient-to-r from-green-50 to-green-100 border border-green-300 rounded-lg p-3 shadow-sm">
+                                                <summary class="cursor-pointer font-semibold text-green-900 flex items-center justify-between">
+                                                    <span>✨ Visual Quality - ${(iter.critique.scores?.visual_quality * 100 || 0).toFixed(0)}%</span>
+                                                    <span class="text-xs text-green-700">(Click for details)</span>
+                                                </summary>
+                                                <div class="mt-3 space-y-2 text-sm">
+                                                    <p><strong>Summary:</strong> ${iter.critique.feedback.visual_quality.feedback || 'No feedback'}</p>
+                                                    ${iter.critique.feedback.visual_quality.score_explanation ? `
+                                                        <p><strong>Score Explanation:</strong> ${iter.critique.feedback.visual_quality.score_explanation}</p>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.visual_quality.specific_observations && iter.critique.feedback.visual_quality.specific_observations.length > 0 ? `
+                                                        <div>
+                                                            <strong>Observations:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1">
+                                                                ${iter.critique.feedback.visual_quality.specific_observations.map(obs => `<li>${obs}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.visual_quality.issues && iter.critique.feedback.visual_quality.issues.length > 0 ? `
+                                                        <div>
+                                                            <strong>Issues:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-red-700">
+                                                                ${iter.critique.feedback.visual_quality.issues.map(issue => `<li>${issue}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.visual_quality.suggestions && iter.critique.feedback.visual_quality.suggestions.length > 0 ? `
+                                                        <div>
+                                                            <strong>Suggestions:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-green-700">
+                                                                ${iter.critique.feedback.visual_quality.suggestions.map(s => `<li>${s}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </details>
+                                        ` : ''}
+
+                                        <!-- Message Clarity Details -->
+                                        ${iter.critique.feedback.message_clarity ? `
+                                            <details class="bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-300 rounded-lg p-3 shadow-sm">
+                                                <summary class="cursor-pointer font-semibold text-yellow-900 flex items-center justify-between">
+                                                    <span>💬 Message Clarity - ${(iter.critique.scores?.message_clarity * 100 || 0).toFixed(0)}%</span>
+                                                    <span class="text-xs text-yellow-700">(Click for details)</span>
+                                                </summary>
+                                                <div class="mt-3 space-y-2 text-sm">
+                                                    <p><strong>Summary:</strong> ${iter.critique.feedback.message_clarity.feedback || 'No feedback'}</p>
+                                                    ${iter.critique.feedback.message_clarity.score_explanation ? `
+                                                        <p><strong>Score Explanation:</strong> ${iter.critique.feedback.message_clarity.score_explanation}</p>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.message_clarity.specific_observations && iter.critique.feedback.message_clarity.specific_observations.length > 0 ? `
+                                                        <div>
+                                                            <strong>Observations:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1">
+                                                                ${iter.critique.feedback.message_clarity.specific_observations.map(obs => `<li>${obs}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.message_clarity.issues && iter.critique.feedback.message_clarity.issues.length > 0 ? `
+                                                        <div>
+                                                            <strong>Issues:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-red-700">
+                                                                ${iter.critique.feedback.message_clarity.issues.map(issue => `<li>${issue}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.message_clarity.suggestions && iter.critique.feedback.message_clarity.suggestions.length > 0 ? `
+                                                        <div>
+                                                            <strong>Suggestions:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-green-700">
+                                                                ${iter.critique.feedback.message_clarity.suggestions.map(s => `<li>${s}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </details>
+                                        ` : ''}
+
+                                        <!-- Safety & Ethics Details -->
+                                        ${iter.critique.feedback.safety_ethics ? `
+                                            <details class="bg-gradient-to-r from-purple-50 to-purple-100 border border-purple-300 rounded-lg p-3 shadow-sm">
+                                                <summary class="cursor-pointer font-semibold text-purple-900 flex items-center justify-between">
+                                                    <span>🛡️ Safety & Ethics - ${(iter.critique.scores?.safety * 100 || 0).toFixed(0)}%</span>
+                                                    <span class="text-xs text-purple-700">(Click for details)</span>
+                                                </summary>
+                                                <div class="mt-3 space-y-2 text-sm">
+                                                    <p><strong>Summary:</strong> ${iter.critique.feedback.safety_ethics.feedback || 'No feedback'}</p>
+                                                    ${iter.critique.feedback.safety_ethics.score_explanation ? `
+                                                        <p><strong>Score Explanation:</strong> ${iter.critique.feedback.safety_ethics.score_explanation}</p>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.safety_ethics.specific_observations && iter.critique.feedback.safety_ethics.specific_observations.length > 0 ? `
+                                                        <div>
+                                                            <strong>Observations:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1">
+                                                                ${iter.critique.feedback.safety_ethics.specific_observations.map(obs => `<li>${obs}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.safety_ethics.issues && iter.critique.feedback.safety_ethics.issues.length > 0 ? `
+                                                        <div>
+                                                            <strong>Issues:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-red-700">
+                                                                ${iter.critique.feedback.safety_ethics.issues.map(issue => `<li>${issue}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                    ${iter.critique.feedback.safety_ethics.suggestions && iter.critique.feedback.safety_ethics.suggestions.length > 0 ? `
+                                                        <div>
+                                                            <strong>Suggestions:</strong>
+                                                            <ul class="list-disc list-inside ml-2 mt-1 space-y-1 text-green-700">
+                                                                ${iter.critique.feedback.safety_ethics.suggestions.map(s => `<li>${s}</li>`).join('')}
+                                                            </ul>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            </details>
+                                        ` : ''}
+
+                                        <!-- Overall Assessment -->
+                                        ${iter.critique.feedback.overall_assessment ? `
+                                            <div class="mt-4 p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                                                <p class="font-semibold text-gray-800 mb-2">📊 Overall Assessment:</p>
+                                                <p class="text-sm text-gray-700">${iter.critique.feedback.overall_assessment}</p>
+                                            </div>
+                                        ` : ''}
+
+                                        <!-- Improvement Priority -->
+                                        ${iter.critique.feedback.improvement_priority && iter.critique.feedback.improvement_priority.length > 0 ? `
+                                            <div class="mt-4 p-3 bg-indigo-50 border border-indigo-300 rounded-lg">
+                                                <p class="font-semibold text-indigo-900 mb-2">🎯 Improvement Priority:</p>
+                                                <ul class="list-decimal list-inside space-y-1 text-sm">
+                                                    ${iter.critique.feedback.improvement_priority.map(priority => {
+                                                        const color = priority.startsWith('HIGH') ? 'text-red-700 font-semibold' : 
+                                                                      priority.startsWith('MEDIUM') ? 'text-orange-600' : 'text-gray-600';
+                                                        return `<li class="${color}">${priority}</li>`;
+                                                    }).join('')}
+                                                </ul>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                ` : iter.critique.issues && iter.critique.issues.length > 0 ? `
+                                    <div class="bg-red-50 border border-red-200 rounded p-3 mb-2 mt-3">
+                                        <div class="text-xs font-semibold text-red-800 mb-1">⚠️ Issues Found:</div>
+                                        <ul class="text-sm text-red-700 list-disc list-inside">
+                                            ${iter.critique.issues.slice(0, 3).map(i => `<li>${i}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                ` : '<div class="bg-green-50 border border-green-200 rounded p-2 mb-2 mt-3"><span class="text-sm text-green-700">✅ No issues detected!</span></div>'}
+                            ` : ''}
+                            
                             ${iter.refinement && iter.refinement.changes_made ? `
-                                <div class="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
-                                    <div class="text-xs font-semibold text-blue-800">Refinement Changes:</div>
-                                    <ul class="text-xs text-blue-700 list-disc list-inside mt-1">
-                                        ${iter.refinement.changes_made.slice(0, 3).map(c => `<li>${c}</li>`).join('')}
+                                <div class="bg-blue-50 border border-blue-200 rounded p-3">
+                                    <div class="text-xs font-semibold text-blue-800 mb-1">🔧 AI Suggested Improvements:</div>
+                                    <ul class="text-sm text-blue-700 list-disc list-inside">
+                                        ${iter.refinement.changes_made.slice(0, 5).map(c => `<li>${c}</li>`).join('')}
                                     </ul>
                                 </div>
                             ` : ''}
@@ -666,6 +1182,19 @@
                             ${(firstIteration.overall_score * 100).toFixed(0)}%
                         </span>
                     </div>
+                    
+                    <!-- BEFORE Image -->
+                    ${firstIteration.generation && (firstIteration.generation.image_path || firstIteration.generation.video_path) ? `
+                        <div class="bg-gray-900 rounded-lg overflow-hidden mb-3">
+                            ${firstIteration.generation.video_path ? `
+                                <video controls class="w-full" style="max-height: 250px;">
+                                    <source src="${cleanImagePath(firstIteration.generation.video_path)}" type="video/mp4">
+                                </video>
+                            ` : `
+                                <img src="${cleanImagePath(firstIteration.generation.image_path)}" alt="Before" class="w-full" style="max-height: 250px; object-fit: contain;">
+                            `}
+                        </div>
+                    ` : ''}
                     
                     <div class="space-y-2 text-sm">
                         <p class="text-gray-700"><strong>Prompt:</strong> ${firstIteration.prompt.substring(0, 100)}...</p>
@@ -710,6 +1239,19 @@
                             ${(lastIteration.overall_score * 100).toFixed(0)}%
                         </span>
                     </div>
+                    
+                    <!-- AFTER Image -->
+                    ${lastIteration.generation && (lastIteration.generation.image_path || lastIteration.generation.video_path) ? `
+                        <div class="bg-gray-900 rounded-lg overflow-hidden mb-3">
+                            ${lastIteration.generation.video_path ? `
+                                <video controls class="w-full" style="max-height: 250px;">
+                                    <source src="${cleanImagePath(lastIteration.generation.video_path)}" type="video/mp4">
+                                </video>
+                            ` : `
+                                <img src="${cleanImagePath(lastIteration.generation.image_path)}" alt="After" class="w-full" style="max-height: 250px; object-fit: contain;">
+                            `}
+                        </div>
+                    ` : ''}
                     
                     <div class="space-y-2 text-sm">
                         <p class="text-gray-700"><strong>Prompt:</strong> ${lastIteration.prompt.substring(0, 100)}...</p>
@@ -875,6 +1417,26 @@
 
         // Load brand kits on page load
         loadBrandKits();
+        
+        // Update brand preview when selected
+        function updateBrandPreview(selectElement) {
+            const brandId = selectElement.value;
+            const previewElement = document.getElementById('brand-preview');
+            const hintElement = document.getElementById('brand-hint');
+            
+            if (!brandId) {
+                previewElement.innerHTML = '';
+                hintElement.style.display = 'inline';
+                return;
+            }
+            
+            // Get selected option text
+            const selectedOption = selectElement.options[selectElement.selectedIndex];
+            const brandInfo = selectedOption.text;
+            
+            previewElement.innerHTML = `<span class="font-medium text-indigo-600">✓ Selected: ${brandInfo}</span>`;
+            hintElement.style.display = 'none';
+        }
     </script>
 </body>
 </html>

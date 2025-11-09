@@ -71,6 +71,8 @@ class GenerateAdRequest(BaseModel):
     style: str = "modern"  # modern, minimal, bold, elegant
     duration: int = Field(default=10, ge=5, le=15, description="Duration in seconds for video")
     media_type: str = "image"  # image or video
+    brand_logo_path: Optional[str] = None  # Path to uploaded brand logo
+    product_image_path: Optional[str] = None  # Path to uploaded product image
 
 
 class CritiqueRequest(BaseModel):

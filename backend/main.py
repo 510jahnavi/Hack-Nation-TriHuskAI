@@ -11,12 +11,14 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 
 from config import settings
-from app.api import critique, generate, brand_kit, multi_agent, approval
+from app.api import critique, generate, brand_kit, multi_agent, approval, upload
 
 # Create necessary directories
 os.makedirs(settings.upload_dir, exist_ok=True)
 os.makedirs(settings.brand_kit_dir, exist_ok=True)
 os.makedirs(settings.generated_ads_dir, exist_ok=True)
+os.makedirs("backend/uploads/brand_logos", exist_ok=True)
+os.makedirs("backend/uploads/product_images", exist_ok=True)
 
 app = FastAPI(
     title="BrandAI - AI Ad Critique System",
@@ -39,6 +41,20 @@ app.include_router(generate.router, prefix="/api", tags=["Generate"])
 app.include_router(brand_kit.router, prefix="/api", tags=["Brand Kit"])
 app.include_router(multi_agent.router, prefix="/api/multi-agent", tags=["Multi-Agent Workflow"])
 app.include_router(approval.router, prefix="/api/approval", tags=["Human Approval"])
+app.include_router(upload.router, prefix="/api/upload", tags=["File Upload"])
+
+# Mount static files for generated ads using absolute paths
+import os
+base_dir = os.path.dirname(os.path.abspath(__file__))
+generated_ads_path = os.path.join(base_dir, "generated_ads")
+uploads_path = os.path.join(base_dir, "uploads")
+
+print(f"📁 Mounting static files:")
+print(f"   /generated_ads → {generated_ads_path}")
+print(f"   /uploads → {uploads_path}")
+
+app.mount("/generated_ads", StaticFiles(directory=generated_ads_path), name="generated_ads")
+app.mount("/uploads", StaticFiles(directory=uploads_path), name="uploads")
 
 
 @app.get("/")
@@ -84,6 +100,22 @@ async def api_root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "service": "BrandAI"}
+
+
+@app.get("/api/download-ad/{ad_id}")
+async def download_ad(ad_id: str):
+    """Download a generated ad image"""
+    ad_path = os.path.join(settings.generated_ads_dir, f"{ad_id}.png")
+    
+    if not os.path.exists(ad_path):
+        raise HTTPException(status_code=404, detail="Ad image not found")
+    
+    return FileResponse(
+        ad_path,
+        media_type="image/png",
+        filename=f"brandai_ad_{ad_id}.png",
+        headers={"Content-Disposition": f"attachment; filename=brandai_ad_{ad_id}.png"}
+    )
 
 
 if __name__ == "__main__":

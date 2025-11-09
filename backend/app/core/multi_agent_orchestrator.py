@@ -62,6 +62,8 @@ class MultiAgentOrchestrator:
         prompt: str,
         brand_kit_id: Optional[str] = None,
         aspect_ratio: str = "1:1",
+        media_type: str = "image",
+        duration: int = 10,
         include_logo: bool = True,
         brand_kit_data: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -71,7 +73,9 @@ class MultiAgentOrchestrator:
         Args:
             prompt: Initial user prompt for ad generation
             brand_kit_id: Brand kit identifier
-            aspect_ratio: Image aspect ratio
+            aspect_ratio: Image/video aspect ratio
+            media_type: 'image' or 'video'
+            duration: Video duration in seconds (5-15)
             include_logo: Whether to include brand logo
             brand_kit_data: Optional brand kit data dictionary
             
@@ -81,7 +85,7 @@ class MultiAgentOrchestrator:
         workflow_start = time.time()
         iterations = []
         
-        logger.info(f"Starting multi-agent workflow for prompt: '{prompt[:50]}...'")
+        logger.info(f"Starting multi-agent workflow for prompt: '{prompt[:50]}...' (media_type: {media_type})")
         
         current_prompt = prompt
         best_ad = None
@@ -97,8 +101,8 @@ class MultiAgentOrchestrator:
                 "timestamp": datetime.now().isoformat()
             }
             
-            # Step 1: Generate Ad
-            logger.info(f"[{iteration}] Generating ad...")
+            # Step 1: Generate Ad (Image or Video)
+            logger.info(f"[{iteration}] Generating {media_type} ad...")
             try:
                 # Create GenerateAdRequest object
                 from app.models.schemas import GenerateAdRequest
@@ -108,13 +112,16 @@ class MultiAgentOrchestrator:
                     product_description=current_prompt,
                     tagline="",
                     style="modern",
-                    media_type="image"
+                    media_type=media_type,  # 'image' or 'video'
+                    duration=duration if media_type == "video" else 10  # Video duration
                 )
                 
                 gen_result = await self.generator.generate_ad(gen_request)
                 iteration_result["generation"] = {
                     "success": gen_result.get("success", False),
-                    "image_path": gen_result.get("image_path"),
+                    "media_path": gen_result.get("image_path") or gen_result.get("video_path"),
+                    "media_type": media_type,
+                    "generation_model": gen_result.get("generation_model", "unknown"),
                     "error": gen_result.get("error")
                 }
                 
@@ -124,7 +131,9 @@ class MultiAgentOrchestrator:
                     iterations.append(iteration_result)
                     break
                 
-                ad_path = gen_result["image_path"]
+                # Get media path (image or video)
+                ad_path = gen_result.get("image_path") or gen_result.get("video_path")
+                logger.info(f"[{iteration}] {media_type.capitalize()} generated: {ad_path}")
                 
             except Exception as e:
                 logger.error(f"[{iteration}] Generation error: {str(e)}")
@@ -138,16 +147,21 @@ class MultiAgentOrchestrator:
             try:
                 description = self.descriptor.describe_ad(ad_path)
                 iteration_result["description"] = description
+                # Extract summary for critique
+                description_text = description.get("summary", "No description available")
             except Exception as e:
                 logger.error(f"[{iteration}] Description error: {str(e)}")
                 iteration_result["description"] = {"error": str(e)}
+                description_text = None
+                description = {}
             
             # Step 3: Critique Ad
             logger.info(f"[{iteration}] Critiquing ad...")
             try:
                 critique = await self.critic.critique_ad(
                     image_path=ad_path,
-                    brand_kit=brand_kit_data
+                    brand_kit=brand_kit_data,
+                    ad_description=description_text
                 )
                 iteration_result["critique"] = critique
                 

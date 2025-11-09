@@ -1,13 +1,17 @@
 """
 Multi-Agent Workflow API - Auto-refining ad generation
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 import logging
+import os
+import uuid
 
 from app.core.multi_agent_orchestrator import MultiAgentOrchestrator
 from app.services.brand_service import BrandService
+from app.core.descriptor_agent import DescriptorAgent
+from app.core.critique_engine import CritiqueEngine
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -15,6 +19,8 @@ router = APIRouter()
 
 # Initialize services
 brand_service = BrandService()
+descriptor_agent = DescriptorAgent()
+critique_engine = CritiqueEngine()
 
 
 class MultiAgentRequest(BaseModel):
@@ -22,6 +28,8 @@ class MultiAgentRequest(BaseModel):
     prompt: str = Field(..., description="Initial ad generation prompt")
     brand_kit_id: Optional[str] = Field(None, description="Brand kit ID to use")
     aspect_ratio: str = Field("1:1", description="Image aspect ratio (1:1, 16:9, 9:16)")
+    media_type: str = Field("image", description="Media type: 'image' or 'video'")
+    duration: int = Field(10, ge=5, le=15, description="Video duration in seconds (if video)")
     include_logo: bool = Field(True, description="Include brand logo in ad")
     max_iterations: int = Field(3, ge=1, le=10, description="Maximum refinement iterations")
     score_threshold: float = Field(0.75, ge=0.0, le=1.0, description="Target quality score")
@@ -59,7 +67,7 @@ async def generate_and_refine_ad(request: MultiAgentRequest):
         # Load brand kit if specified
         brand_kit_data = None
         if request.brand_kit_id:
-            brand_kit_data = brand_service.get_brand_kit(request.brand_kit_id)
+            brand_kit_data = await brand_service.get_brand_kit(request.brand_kit_id)
             if not brand_kit_data:
                 raise HTTPException(
                     status_code=404,
@@ -80,6 +88,8 @@ async def generate_and_refine_ad(request: MultiAgentRequest):
             prompt=request.prompt,
             brand_kit_id=request.brand_kit_id,
             aspect_ratio=request.aspect_ratio,
+            media_type=request.media_type,
+            duration=request.duration,
             include_logo=request.include_logo,
             brand_kit_data=brand_kit_data
         )
@@ -152,3 +162,125 @@ async def get_workflow_info():
         "api_key_configured": bool(settings.gemini_api_key),
         "note": "Full functionality requires gemini_api_key in .env file"
     }
+
+
+@router.post("/critique-uploaded-ad")
+async def critique_uploaded_ad(
+    file: UploadFile = File(..., description="Ad image or video to critique"),
+    brand_kit_id: Optional[str] = Form(None, description="Brand kit ID for alignment checking")
+):
+    """
+    Critique a user-uploaded ad clip (image or video)
+    
+    Workflow:
+    1. User uploads ad file + provides brand kit
+    2. Descriptor Agent analyzes the ad (colors, text, objects, mood)
+    3. Critique Agent evaluates across 4 dimensions
+    
+    Returns detailed critique with scores and recommendations.
+    """
+    try:
+        logger.info(f"Critique uploaded ad: {file.filename}, brand_kit: {brand_kit_id}")
+        
+        # Validate file type
+        if not (file.content_type.startswith('image/') or file.content_type.startswith('video/')):
+            raise HTTPException(status_code=400, detail="File must be an image or video")
+        
+        # Save uploaded file
+        file_ext = os.path.splitext(file.filename)[1]
+        file_id = str(uuid.uuid4())
+        file_path = os.path.join(settings.upload_dir, f"{file_id}{file_ext}")
+        
+        os.makedirs(settings.upload_dir, exist_ok=True)
+        
+        with open(file_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+        
+        logger.info(f"Saved uploaded file to: {file_path}")
+        
+        # Load brand kit if provided
+        brand_kit = None
+        if brand_kit_id:
+            brand_kit = await brand_service.get_brand_kit(brand_kit_id)
+            if not brand_kit:
+                raise HTTPException(status_code=404, detail=f"Brand kit '{brand_kit_id}' not found")
+            logger.info(f"Loaded brand kit: {brand_kit.brand_name}")
+        
+        # Step 1: Descriptor Agent - Analyze ad components
+        logger.info("Step 1: Running Descriptor Agent...")
+        description = descriptor_agent.describe_ad(file_path)
+        logger.info(f"Description summary: {description.get('summary', '')[:100]}...")
+        
+        # Step 2: Critique Agent - Evaluate the ad
+        logger.info("Step 2: Running Critique Agent...")
+        critique = await critique_engine.critique_ad(
+            image_path=file_path,
+            brand_kit=brand_kit,
+            ad_description=description.get("summary")
+        )
+        
+        logger.info(f"Critique complete - Overall score: {critique.overall_score:.2f}")
+        
+        # Build response
+        return {
+            "success": True,
+            "file_path": file_path,
+            "filename": file.filename,
+            "brand_kit": {
+                "id": brand_kit.brand_id if brand_kit else None,
+                "name": brand_kit.brand_name if brand_kit else None,
+                "colors": brand_kit.primary_colors if brand_kit else None
+            } if brand_kit else None,
+            "description": description,
+            "critique": {
+                "brand_alignment_score": critique.brand_alignment.score,
+                "visual_quality_score": critique.visual_quality.score,
+                "message_clarity_score": critique.message_clarity.score,
+                "safety_score": critique.safety_ethics.score,
+                "overall_score": critique.overall_score,
+                "brand_alignment": {
+                    "score": critique.brand_alignment.score,
+                    "level": critique.brand_alignment.level,
+                    "feedback": critique.brand_alignment.feedback,
+                    "issues": critique.brand_alignment.issues,
+                    "suggestions": critique.brand_alignment.suggestions
+                },
+                "visual_quality": {
+                    "score": critique.visual_quality.score,
+                    "level": critique.visual_quality.level,
+                    "feedback": critique.visual_quality.feedback,
+                    "issues": critique.visual_quality.issues,
+                    "suggestions": critique.visual_quality.suggestions
+                },
+                "message_clarity": {
+                    "score": critique.message_clarity.score,
+                    "level": critique.message_clarity.level,
+                    "feedback": critique.message_clarity.feedback,
+                    "issues": critique.message_clarity.issues,
+                    "suggestions": critique.message_clarity.suggestions
+                },
+                "safety_ethics": {
+                    "score": critique.safety_ethics.score,
+                    "level": critique.safety_ethics.level,
+                    "feedback": critique.safety_ethics.feedback,
+                    "issues": critique.safety_ethics.issues,
+                    "suggestions": critique.safety_ethics.suggestions
+                },
+                "needs_manual_review": critique.needs_manual_review if hasattr(critique, 'needs_manual_review') else False,
+                "confidence_scores": critique.confidence_scores if hasattr(critique, 'confidence_scores') else {}
+            },
+            "workflow": {
+                "step_1": "Descriptor Agent - Analyzed ad components",
+                "step_2": "Critique Agent - Evaluated quality and alignment"
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error critiquing uploaded ad: {str(e)}", exc_info=True)
+        # Clean up file on error
+        if 'file_path' in locals() and os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Critique failed: {str(e)}")
